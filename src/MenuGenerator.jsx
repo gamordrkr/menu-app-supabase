@@ -60,14 +60,10 @@ const CATEGORIA_LABEL_TABLA = {
 
 const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
 
-const FAMILY_COLORS = [
-  { bg: '#FAEEDA', border: '#BA7517', text: '#633806' },
-  { bg: '#EAF3DE', border: '#3B6D11', text: '#27500A' },
-  { bg: '#FBEAF0', border: '#993556', text: '#72243E' },
-  { bg: '#E6F1FB', border: '#185FA5', text: '#0C447C' },
-  { bg: '#FCEBEB', border: '#A32D2D', text: '#791F1F' },
-  { bg: '#EEEDFE', border: '#534AB7', text: '#3C3489' },
-];
+// Un único estilo de advertencia para toda celda en conflicto de cooldown.
+// (Antes había una paleta de varios colores por familia; resultaba confusa
+// sin dar información real, así que se simplificó a un solo color + modal con detalle.)
+const CONFLICT_STYLE = { bg: '#FAEEDA', border: '#BA7517', text: '#633806' };
 
 const COOLDOWN_WEEKS = 4; // misma familia no puede repetirse antes de N semanas
 
@@ -175,49 +171,44 @@ function generateCycle(catalog, numSemanas, seed) {
   return cycle;
 }
 
-// Resalta SOLO familias que quedaron a menos de COOLDOWN_WEEKS de distancia
-// real (incluye casos donde, por falta de variedad, el algoritmo tuvo que
-// relajar la regla) para que el usuario las revise.
+// Para cada celda dentro de COOLDOWN_WEEKS de otra con la misma familia,
+// devuelve { highlight: bool, conflicts: [{semanaIdx, diaIdx, platillo}] }
+// para que el modal pueda mostrar info real: con qué otro platillo choca y dónde.
 function computeViolationHighlights(cycle) {
-  const lastSeenWeek = {};
-  for (const cat of CATEGORIAS) lastSeenWeek[cat] = {};
-  const highlights = []; // [semanaIdx][diaIdx][categoria] = colorObj | null
-  let colorCursor = 0;
-  const familyColorAssign = {};
+  // occurrences[categoria][familia_id] = [{semanaIdx, diaIdx, platillo}, ...]
+  const occurrences = {};
+  for (const cat of CATEGORIAS) occurrences[cat] = {};
 
   for (let s = 0; s < cycle.length; s++) {
-    const semanaHighlight = DIAS.map(() => ({}));
-    for (const cat of CATEGORIAS) {
-      if (FIXED_CATEGORIES[cat]) {
-        DIAS.forEach((_, d) => (semanaHighlight[d][cat] = null));
-        continue;
-      }
-      for (let d = 0; d < 5; d++) {
-        const dish = cycle[s][d][cat];
-        if (!dish) continue;
-        const lastWeek = lastSeenWeek[cat][dish.familia_id];
-        const isViolation = lastWeek !== undefined && s - lastWeek < COOLDOWN_WEEKS;
-        if (isViolation) {
-          const key = `${cat}_${dish.familia_id}`;
-          if (!familyColorAssign[key]) {
-            familyColorAssign[key] = FAMILY_COLORS[colorCursor % FAMILY_COLORS.length];
-            colorCursor++;
-          }
-          semanaHighlight[d][cat] = familyColorAssign[key];
-        } else {
-          semanaHighlight[d][cat] = null;
-        }
-      }
-    }
-    // actualizar lastSeenWeek con lo que se vio esta semana
     for (const cat of CATEGORIAS) {
       if (FIXED_CATEGORIES[cat]) continue;
       for (let d = 0; d < 5; d++) {
         const dish = cycle[s][d][cat];
-        if (dish) lastSeenWeek[cat][dish.familia_id] = s;
+        if (!dish) continue;
+        if (!occurrences[cat][dish.familia_id]) occurrences[cat][dish.familia_id] = [];
+        occurrences[cat][dish.familia_id].push({ semanaIdx: s, diaIdx: d, platillo: dish.platillo });
       }
     }
-    highlights.push(semanaHighlight);
+  }
+
+  // highlights[semanaIdx][diaIdx][categoria] = { conflicts: [...] } | null
+  const highlights = cycle.map(() => DIAS.map(() => ({})));
+
+  for (const cat of CATEGORIAS) {
+    if (FIXED_CATEGORIES[cat]) {
+      cycle.forEach((_, s) => DIAS.forEach((__, d) => (highlights[s][d][cat] = null)));
+      continue;
+    }
+    for (const famId in occurrences[cat]) {
+      const occs = occurrences[cat][famId];
+      occs.forEach((occ, i) => {
+        const conflicts = occs.filter(
+          (other, j) => j !== i && Math.abs(other.semanaIdx - occ.semanaIdx) < COOLDOWN_WEEKS
+        );
+        highlights[occ.semanaIdx][occ.diaIdx][cat] =
+          conflicts.length > 0 ? { conflicts } : null;
+      });
+    }
   }
   return highlights;
 }
@@ -591,6 +582,64 @@ export default function MenuGenerator() {
         .menu-dish-actions-row button:hover {
           background: rgba(0,0,0,0.16) !important;
         }
+        .menu-conflict-icon {
+          margin-left: 4px;
+          vertical-align: -1px;
+          color: #BA7517;
+          flex-shrink: 0;
+        }
+
+        .menu-info-backdrop {
+          position: fixed;
+          inset: 0;
+          background: rgba(0,0,0,0.5);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 60;
+          padding: 24px;
+          box-sizing: border-box;
+        }
+        .menu-info-box {
+          background: var(--color-background-primary);
+          color: var(--color-text-primary);
+          border-radius: var(--border-radius-lg);
+          padding: 18px 20px;
+          width: 360px;
+          max-width: 100%;
+          max-height: 80vh;
+          overflow-y: auto;
+          box-sizing: border-box;
+        }
+        .menu-info-title {
+          font-size: 15px;
+          font-weight: 600;
+          line-height: 1.4;
+          margin-bottom: 10px;
+        }
+        .menu-info-subtitle {
+          font-size: 13px;
+          color: var(--color-text-secondary);
+          line-height: 1.4;
+          margin-bottom: 8px;
+        }
+        .menu-info-list {
+          margin: 0 0 14px;
+          padding-left: 18px;
+          font-size: 13px;
+          line-height: 1.6;
+          color: var(--color-text-primary);
+        }
+        .menu-info-close {
+          width: 100%;
+          padding: 9px;
+          border-radius: var(--border-radius-md);
+          border: 1px solid var(--color-border-secondary);
+          background: var(--color-background-secondary);
+          color: var(--color-text-primary);
+          font-size: 14px;
+          cursor: pointer;
+        }
 
         @media (max-width: 680px) {
           .menu-toolbar-mini {
@@ -809,7 +858,7 @@ function Toolbar({
             onChange={(e) => onNumSemanasChange(Number(e.target.value))}
             style={selectStyle}
           >
-            {[1, 2, 3, 4, 6, 8].map((n) => (
+            {[1, 2, 3, 4, 6, 8, 10, 12].map((n) => (
               <option key={n} value={n}>
                 {n}
               </option>
@@ -916,8 +965,7 @@ function Legend() {
     >
       <AlertTriangle size={14} style={{ color: '#BA7517' }} />
       <span>
-        Las celdas resaltadas comparten familia con otra aparecida hace menos de{' '}
-        {COOLDOWN_WEEKS} semanas — revísalas antes de aprobar.
+        Las celdas resaltadas se repiten con otra dentro de {COOLDOWN_WEEKS} semanas — tócalas para ver con cuál.
       </span>
     </div>
   );
@@ -1056,23 +1104,26 @@ const rowLabelStyle = {
 };
 
 function DishCell({ dish, highlight, isFixed, onRegenerate, onEdit }) {
-  const [showFull, setShowFull] = useState(false);
+  const [showInfo, setShowInfo] = useState(false);
   if (!dish) return null;
 
+  const hasConflict = !!highlight;
   const style = {
-    background: highlight ? highlight.bg : 'var(--color-background-primary)',
-    border: `1px solid ${highlight ? highlight.border : 'var(--color-border-tertiary)'}`,
+    background: hasConflict ? CONFLICT_STYLE.bg : 'var(--color-background-primary)',
+    border: `1px solid ${hasConflict ? CONFLICT_STYLE.border : 'var(--color-border-tertiary)'}`,
     borderRadius: 'var(--border-radius-md)',
     padding: isFixed ? '8px 10px' : '4px 8px 8px',
     height: '100%',
     boxSizing: 'border-box',
     fontSize: '12px',
-    color: highlight ? highlight.text : 'var(--color-text-primary)',
+    color: hasConflict ? CONFLICT_STYLE.text : 'var(--color-text-primary)',
     lineHeight: 1.3,
   };
 
-  // Texto largo se trunca a 2 líneas; el resto se ve completo con tap.
+  // Texto largo se trunca a 2 líneas. Se puede tocar para ver el detalle si
+  // el texto es largo O si hay conflicto de repetición (info útil en ambos casos).
   const isLong = dish.platillo.length > 30;
+  const isTappable = isLong || hasConflict;
 
   return (
     <div className="menu-dish-cell-wrap" style={style}>
@@ -1104,45 +1155,42 @@ function DishCell({ dish, highlight, isFixed, onRegenerate, onEdit }) {
       )}
       <div
         className={isLong ? 'menu-dish-text menu-dish-text-clamp' : 'menu-dish-text'}
-        style={{ cursor: isLong ? 'pointer' : 'default' }}
-        onClick={isLong ? (e) => { e.stopPropagation(); setShowFull(true); } : undefined}
+        style={{ cursor: isTappable ? 'pointer' : 'default' }}
+        onClick={isTappable ? (e) => { e.stopPropagation(); setShowInfo(true); } : undefined}
         title={isLong ? dish.platillo : undefined}
       >
         {dish.platillo}
+        {hasConflict && <AlertTriangle size={11} className="menu-conflict-icon" aria-label="Se repite" />}
       </div>
-      {showFull && (
+      {showInfo && (
         <div
           role="dialog"
-          aria-label="Nombre completo del platillo"
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0,0,0,0.45)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 60,
-          }}
+          aria-label="Detalle del platillo"
+          className="menu-info-backdrop"
           onClick={(e) => {
             e.stopPropagation();
-            setShowFull(false);
+            setShowInfo(false);
           }}
         >
-          <div
-            style={{
-              background: 'var(--color-background-primary)',
-              color: 'var(--color-text-primary)',
-              borderRadius: 'var(--border-radius-lg)',
-              padding: '18px 20px',
-              maxWidth: 'calc(100vw - 48px)',
-              width: '340px',
-              fontSize: '14px',
-              lineHeight: 1.5,
-              boxSizing: 'border-box',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {dish.platillo}
+          <div className="menu-info-box" onClick={(e) => e.stopPropagation()}>
+            <div className="menu-info-title">{dish.platillo}</div>
+            {hasConflict && (
+              <>
+                <div className="menu-info-subtitle">
+                  Se repite (misma familia) en {highlight.conflicts.length === 1 ? 'esta otra fecha' : 'estas otras fechas'}, dentro de las {COOLDOWN_WEEKS} semanas de margen:
+                </div>
+                <ul className="menu-info-list">
+                  {highlight.conflicts.map((c, i) => (
+                    <li key={i}>
+                      <strong>Semana {c.semanaIdx + 1}, {DIAS[c.diaIdx]}:</strong> {c.platillo}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+            <button className="menu-info-close" onClick={() => setShowInfo(false)}>
+              Cerrar
+            </button>
           </div>
         </div>
       )}
