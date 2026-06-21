@@ -226,11 +226,12 @@ export default function MenuGenerator() {
   const catalog = clients[activeClient]?.catalog || [];
   const byCat = useMemo(() => buildIndexByCategory(catalog), [catalog]);
 
-  // --- Colapsa la barra superior al deslizar hacia abajo (solo afecta layout móvil vía CSS) ---
+  // --- Colapsa la barra superior al deslizar hacia abajo. Solo vuelve a
+  // abrirse con click en el botón (no se auto-restaura al subir el scroll).
   useEffect(() => {
     let lastY = window.scrollY;
     let ticking = false;
-    const THRESHOLD = 8; // px mínimos de movimiento para no reaccionar a micro-scrolls
+    const THRESHOLD = 8;
 
     const onScroll = () => {
       if (ticking) return;
@@ -238,12 +239,10 @@ export default function MenuGenerator() {
       requestAnimationFrame(() => {
         const currentY = window.scrollY;
         const delta = currentY - lastY;
-        if (Math.abs(delta) > THRESHOLD) {
-          if (delta > 0 && currentY > 80) {
-            setToolbarCollapsed(true);
-          } else if (delta < 0) {
-            setToolbarCollapsed(false);
-          }
+        if (delta > THRESHOLD && currentY > 80) {
+          setToolbarCollapsed(true);
+          lastY = currentY;
+        } else if (Math.abs(delta) > THRESHOLD) {
           lastY = currentY;
         }
         ticking = false;
@@ -462,7 +461,7 @@ export default function MenuGenerator() {
           display: none;
         }
 
-        /* --- Tabla con encabezado y primera columna fijos, CSS Grid plano (sin display:contents) --- */
+        /* --- Tabla: columna de categoría fija fuera del scroll horizontal --- */
         .menu-scroll-wrap {
           position: relative;
           border: 0.5px solid var(--color-border-tertiary);
@@ -470,67 +469,80 @@ export default function MenuGenerator() {
           overflow: hidden;
           background: var(--color-background-primary);
         }
-        .menu-scroll-area {
-          overflow: auto;
+        .menu-split {
+          display: flex;
+          align-items: flex-start;
+        }
+        .menu-label-col {
+          flex-shrink: 0;
+          display: flex;
+          flex-direction: column;
+          border-right: 1px solid var(--color-border-tertiary);
+          z-index: 2;
+        }
+        .menu-days-scroll {
+          overflow-x: auto;
           -webkit-overflow-scrolling: touch;
           scrollbar-width: thin;
-          max-height: 72vh;
+          flex: 1;
+          min-width: 0;
         }
-        .menu-grid {
+        .menu-days-grid {
           display: grid;
-          background: var(--color-background-primary);
         }
         .menu-cell {
           box-sizing: border-box;
           background: var(--color-background-primary);
           border-bottom: 0.5px solid var(--color-border-tertiary);
           border-right: 0.5px solid var(--color-border-tertiary);
-          padding: 6px;
+          padding: 4px;
           display: flex;
           align-items: stretch;
           overflow: hidden;
           min-width: 0;
-          min-height: 0;
         }
         .menu-cell-corner,
         .menu-cell-daylabel {
-          position: sticky;
-          top: 0;
-          z-index: 5;
           background: var(--color-background-info);
           color: var(--color-text-info);
-          font-size: 12px;
+          font-size: 11px;
           font-weight: 500;
           text-transform: uppercase;
           letter-spacing: 0.02em;
-          padding: 10px 8px;
+          padding: 6px;
           align-items: center;
         }
         .menu-cell-daylabel {
           justify-content: center;
           text-align: center;
+          border-right: 0.5px solid rgba(255,255,255,0.15);
         }
         .menu-cell-corner {
-          left: 0;
-          z-index: 6;
           justify-content: flex-start;
+          border-right: none;
         }
         .menu-cell-label {
-          position: sticky;
-          left: 0;
-          z-index: 4;
+          width: 100%;
           background: var(--color-background-secondary);
           color: var(--color-text-secondary);
-          font-size: 13px;
+          font-size: 11px;
           font-weight: 500;
-          padding: 10px 8px;
+          padding: 6px;
           align-items: center;
+          border-right: none;
         }
         .menu-cell-dish {
-          padding: 4px;
+          padding: 3px;
         }
         .menu-scroll-fade {
-          display: none;
+          position: absolute;
+          top: 0;
+          right: 0;
+          bottom: 0;
+          width: 16px;
+          pointer-events: none;
+          background: linear-gradient(to right, transparent, var(--color-background-primary) 95%);
+          z-index: 3;
         }
 
         .menu-dish-cell-wrap {
@@ -551,10 +563,10 @@ export default function MenuGenerator() {
         }
         .menu-dish-actions {
           position: absolute;
-          top: 6px;
-          right: 6px;
+          top: 4px;
+          right: 4px;
           display: flex;
-          gap: 4px;
+          gap: 3px;
           opacity: 0.55;
           transition: opacity 0.15s ease;
         }
@@ -915,14 +927,14 @@ function EmptyClientState({ clientName }) {
   );
 }
 
-const LABEL_COL_WIDTH = 130; // px, ancho de la columna de categoría
-const DAY_COL_WIDTH = 160; // px, ancho de cada columna de día
+const LABEL_COL_WIDTH = 96; // px, ancho de la columna de categoría (fuera del scroll horizontal)
+const DAY_COL_WIDTH = 118; // px, ancho de cada columna de día (dentro del scroll horizontal)
+const HEADER_ROW_H = 38; // px, alto de la fila de encabezado (días)
+const BODY_ROW_H = 78; // px, alto de cada fila de categoría (suficiente para 3 líneas truncadas)
 
 function WeekTable({ semanaIdx, semana, highlightWeek, onRegenerateCell, onOpenEdit }) {
-  const gridTemplateColumns = `${LABEL_COL_WIDTH}px repeat(${DIAS.length}, minmax(${DAY_COL_WIDTH}px, 1fr))`;
-
   return (
-    <div style={{ marginBottom: '28px' }}>
+    <div style={{ marginBottom: '24px' }}>
       <div
         style={{
           fontSize: '16px',
@@ -934,34 +946,61 @@ function WeekTable({ semanaIdx, semana, highlightWeek, onRegenerateCell, onOpenE
         Semana {semanaIdx + 1}
       </div>
       <div className="menu-scroll-wrap">
-        <div className="menu-scroll-area">
+        <div className="menu-split">
+          {/* Columna de categoría: nunca se mueve, no forma parte del scroll horizontal */}
           <div
-            className="menu-grid"
-            style={{ gridTemplateColumns, minWidth: LABEL_COL_WIDTH + DAY_COL_WIDTH * DIAS.length }}
-            role="table"
-            aria-label={`Menú semana ${semanaIdx + 1}`}
+            className="menu-label-col"
+            style={{ width: LABEL_COL_WIDTH }}
+            role="rowgroup"
+            aria-label="Categorías"
           >
-            {/* Fila de encabezado: celdas hijas directas del grid, sin wrapper de fila */}
-            <div className="menu-cell menu-cell-corner" role="columnheader">
+            <div className="menu-cell menu-cell-corner" style={{ height: HEADER_ROW_H }} role="columnheader">
               Categoría
             </div>
-            {DIAS.map((dia) => (
-              <div key={dia} className="menu-cell menu-cell-daylabel" role="columnheader">
-                {dia}
+            {CATEGORIAS.map((cat) => (
+              <div
+                key={cat}
+                className="menu-cell menu-cell-label"
+                style={{ height: BODY_ROW_H }}
+                role="rowheader"
+              >
+                {CATEGORIA_LABEL[cat]}
               </div>
             ))}
+          </div>
 
-            {/* Filas de categorías, cada una un Fragment (no agrega nodo al DOM) */}
-            {CATEGORIAS.map((cat) => (
-              <React.Fragment key={cat}>
-                <div className="menu-cell menu-cell-label" role="rowheader">
-                  {CATEGORIA_LABEL[cat]}
+          {/* Días + platillos: única zona con scroll horizontal */}
+          <div className="menu-days-scroll">
+            <div
+              className="menu-days-grid"
+              style={{
+                gridTemplateColumns: `repeat(${DIAS.length}, minmax(${DAY_COL_WIDTH}px, 1fr))`,
+                minWidth: DAY_COL_WIDTH * DIAS.length,
+              }}
+              role="table"
+              aria-label={`Menú semana ${semanaIdx + 1}`}
+            >
+              {DIAS.map((dia) => (
+                <div
+                  key={dia}
+                  className="menu-cell menu-cell-daylabel"
+                  style={{ height: HEADER_ROW_H }}
+                  role="columnheader"
+                >
+                  {dia}
                 </div>
-                {DIAS.map((_, diaIdx) => {
+              ))}
+              {CATEGORIAS.map((cat) =>
+                DIAS.map((_, diaIdx) => {
                   const dish = semana[diaIdx][cat];
                   const highlight = highlightWeek[diaIdx][cat];
                   return (
-                    <div className="menu-cell menu-cell-dish" role="cell" key={diaIdx}>
+                    <div
+                      key={`${cat}_${diaIdx}`}
+                      className="menu-cell menu-cell-dish"
+                      style={{ height: BODY_ROW_H }}
+                      role="cell"
+                    >
                       <DishCell
                         dish={dish}
                         highlight={highlight}
@@ -971,9 +1010,9 @@ function WeekTable({ semanaIdx, semana, highlightWeek, onRegenerateCell, onOpenE
                       />
                     </div>
                   );
-                })}
-              </React.Fragment>
-            ))}
+                })
+              )}
+            </div>
           </div>
         </div>
         <div className="menu-scroll-fade" aria-hidden="true" />
@@ -1012,23 +1051,22 @@ function DishCell({ dish, highlight, isFixed, onRegenerate, onEdit }) {
     background: highlight ? highlight.bg : 'var(--color-background-primary)',
     border: `1px solid ${highlight ? highlight.border : 'var(--color-border-tertiary)'}`,
     borderRadius: 'var(--border-radius-md)',
-    padding: '10px 12px',
-    minHeight: '64px',
+    padding: '8px 10px',
     height: '100%',
     boxSizing: 'border-box',
-    fontSize: '13px',
+    fontSize: '12px',
     color: highlight ? highlight.text : 'var(--color-text-primary)',
-    lineHeight: 1.4,
+    lineHeight: 1.35,
   };
 
-  // Texto largo (más de ~38 caracteres) se trunca a 3 líneas; el resto se ve completo.
-  const isLong = dish.platillo.length > 38;
+  // Texto largo (más de ~34 caracteres) se trunca a 3 líneas; el resto se ve completo.
+  const isLong = dish.platillo.length > 34;
 
   return (
     <div className="menu-dish-cell-wrap" style={style}>
       <div
         className={isLong ? 'menu-dish-text menu-dish-text-clamp' : 'menu-dish-text'}
-        style={{ paddingRight: isFixed ? 0 : '52px', cursor: isLong ? 'pointer' : 'default' }}
+        style={{ paddingRight: isFixed ? 0 : '40px', cursor: isLong ? 'pointer' : 'default' }}
         onClick={isLong ? (e) => { e.stopPropagation(); setShowFull(true); } : undefined}
         title={isLong ? dish.platillo : undefined}
       >
@@ -1045,7 +1083,7 @@ function DishCell({ dish, highlight, isFixed, onRegenerate, onEdit }) {
             aria-label="Sustituir platillo aleatoriamente"
             style={iconBtnStyle}
           >
-            <Shuffle size={13} />
+            <Shuffle size={11} />
           </button>
           <button
             onClick={(e) => {
@@ -1056,7 +1094,7 @@ function DishCell({ dish, highlight, isFixed, onRegenerate, onEdit }) {
             aria-label="Elegir platillo manualmente"
             style={iconBtnStyle}
           >
-            <Edit3 size={13} />
+            <Edit3 size={11} />
           </button>
         </div>
       )}
@@ -1104,9 +1142,9 @@ const iconBtnStyle = {
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  width: '26px',
-  height: '26px',
-  borderRadius: '6px',
+  width: '20px',
+  height: '20px',
+  borderRadius: '5px',
   border: 'none',
   background: 'rgba(0,0,0,0.08)',
   color: 'inherit',
