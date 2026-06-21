@@ -11,6 +11,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import {
   listClientes,
   createCliente,
@@ -220,7 +221,7 @@ export default function MenuGenerator() {
   const [showNewClient, setShowNewClient] = useState(false);
   const [saveStatus, setSaveStatus] = useState('idle'); // idle | saving | saved | error
   const [loadError, setLoadError] = useState('');
-
+  const [exporting, setExporting] = useState(false);
   const catalog = clients[activeClient]?.catalog || [];
   const byCat = useMemo(() => buildIndexByCategory(catalog), [catalog]);
 
@@ -330,8 +331,13 @@ export default function MenuGenerator() {
     setEditing(null);
   };
 
-  const handleExportExcel = () => {
-    exportToExcel(cycle, numSemanas, clients[activeClient]?.name || 'cliente');
+  const handleExportExcel = async () => {
+    setExporting(true);
+    try {
+      await exportToExcel(cycle, numSemanas, clients[activeClient]?.name || 'cliente');
+    } finally {
+      setExporting(false);
+    }
   };
 
   const handleAddClient = async (name, newCatalog) => {
@@ -389,7 +395,76 @@ export default function MenuGenerator() {
 
   return (
     <div style={{ fontFamily: 'var(--font-sans)', padding: '0', maxWidth: '100%' }}>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } } .spin { animation: spin 1s linear infinite; }`}</style>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spin { animation: spin 1s linear infinite; }
+
+        .menu-toolbar {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 12px;
+        }
+        .menu-toolbar-group {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .menu-toolbar-actions {
+          display: flex;
+          gap: 8px;
+          flex: 1 1 auto;
+        }
+        .menu-btn-label { display: inline; }
+
+        .menu-scroll-wrap {
+          position: relative;
+        }
+        .menu-scroll-area {
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          scrollbar-width: thin;
+        }
+        .menu-scroll-fade {
+          display: none;
+        }
+
+        @media (max-width: 680px) {
+          .menu-toolbar {
+            flex-direction: column;
+            align-items: stretch;
+          }
+          .menu-toolbar-group {
+            justify-content: space-between;
+          }
+          .menu-toolbar-actions {
+            flex-direction: column;
+          }
+          .menu-toolbar-actions button {
+            width: 100%;
+            justify-content: center;
+          }
+          .menu-toolbar-meta {
+            justify-content: space-between;
+            margin-left: 0 !important;
+            width: 100%;
+          }
+          .menu-table { min-width: 600px !important; }
+          .menu-table th, .menu-table .menu-row-label { font-size: 11px !important; }
+          .menu-dish-cell { font-size: 12px !important; padding: 8px 8px !important; min-height: 52px !important; }
+          .menu-row-label { width: 110px !important; padding: 6px !important; }
+          .menu-scroll-fade {
+            display: block;
+            position: absolute;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            width: 28px;
+            pointer-events: none;
+            background: linear-gradient(to right, transparent, var(--color-background-primary) 90%);
+          }
+        }
+      `}</style>
       <Toolbar
         clients={clients}
         activeClient={activeClient}
@@ -399,6 +474,7 @@ export default function MenuGenerator() {
         onNumSemanasChange={handleNumSemanasChange}
         onRegenerate={handleRegenerate}
         onExport={handleExportExcel}
+        exporting={exporting}
         catalogSize={catalog.length}
         saveStatus={saveStatus}
       />
@@ -476,16 +552,14 @@ function Toolbar({
   onNumSemanasChange,
   onRegenerate,
   onExport,
+  exporting,
   catalogSize,
   saveStatus,
 }) {
   return (
     <div
+      className="menu-toolbar"
       style={{
-        display: 'flex',
-        flexWrap: 'wrap',
-        alignItems: 'center',
-        gap: '12px',
         padding: '16px',
         background: 'var(--color-background-secondary)',
         borderRadius: 'var(--border-radius-lg)',
@@ -495,14 +569,14 @@ function Toolbar({
         zIndex: 10,
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <div className="menu-toolbar-group">
         <label style={{ fontSize: '14px', color: 'var(--color-text-secondary)' }}>
           Cliente:
         </label>
         <select
           value={activeClient}
           onChange={(e) => onClientChange(e.target.value)}
-          style={selectStyle}
+          style={{ ...selectStyle, flex: 1 }}
         >
           {Object.entries(clients).map(([id, c]) => (
             <option key={id} value={id}>
@@ -515,7 +589,7 @@ function Toolbar({
         </button>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <div className="menu-toolbar-group">
         <label style={{ fontSize: '14px', color: 'var(--color-text-secondary)' }}>
           Semanas:
         </label>
@@ -532,15 +606,19 @@ function Toolbar({
         </select>
       </div>
 
-      <button onClick={onRegenerate} disabled={catalogSize === 0} style={btnStyle('primary')}>
-        <RefreshCw size={15} /> Generar ciclo nuevo
-      </button>
+      <div className="menu-toolbar-actions">
+        <button onClick={onRegenerate} disabled={catalogSize === 0} style={btnStyle('primary')}>
+          <RefreshCw size={15} /> <span className="menu-btn-label">Generar ciclo nuevo</span>
+        </button>
 
-      <button onClick={onExport} disabled={catalogSize === 0} style={btnStyle('secondary')}>
-        <Download size={15} /> Exportar a Excel
-      </button>
+        <button onClick={onExport} disabled={catalogSize === 0 || exporting} style={btnStyle('secondary')}>
+          {exporting ? <Loader2 size={15} className="spin" /> : <Download size={15} />}{' '}
+          <span className="menu-btn-label">{exporting ? 'Generando...' : 'Exportar a Excel'}</span>
+        </button>
+      </div>
 
       <div
+        className="menu-toolbar-meta"
         style={{
           marginLeft: 'auto',
           fontSize: '12px',
@@ -652,7 +730,7 @@ function EmptyClientState({ clientName }) {
 
 function WeekTable({ semanaIdx, semana, highlightWeek, onRegenerateCell, onOpenEdit }) {
   return (
-    <div style={{ marginBottom: '28px', overflowX: 'auto' }}>
+    <div style={{ marginBottom: '28px' }}>
       <div
         style={{
           fontSize: '16px',
@@ -663,47 +741,55 @@ function WeekTable({ semanaIdx, semana, highlightWeek, onRegenerateCell, onOpenE
       >
         Semana {semanaIdx + 1}
       </div>
-      <table
-        style={{
-          width: '100%',
-          borderCollapse: 'separate',
-          borderSpacing: '4px',
-          minWidth: '760px',
-        }}
-      >
-        <thead>
-          <tr>
-            <th style={headerCellStyle('left')}>Categoría</th>
-            {DIAS.map((dia) => (
-              <th key={dia} style={headerCellStyle('center')}>
-                {dia}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {CATEGORIAS.map((cat) => (
-            <tr key={cat}>
-              <td style={rowLabelStyle}>{CATEGORIA_LABEL[cat]}</td>
-              {DIAS.map((_, diaIdx) => {
-                const dish = semana[diaIdx][cat];
-                const highlight = highlightWeek[diaIdx][cat];
-                return (
-                  <td key={diaIdx} style={{ padding: 0 }}>
-                    <DishCell
-                      dish={dish}
-                      highlight={highlight}
-                      isFixed={!!FIXED_CATEGORIES[cat]}
-                      onRegenerate={() => onRegenerateCell(semanaIdx, diaIdx, cat)}
-                      onEdit={() => onOpenEdit(diaIdx, cat)}
-                    />
+      <div className="menu-scroll-wrap">
+        <div className="menu-scroll-area">
+          <table
+            className="menu-table"
+            style={{
+              width: '100%',
+              borderCollapse: 'separate',
+              borderSpacing: '4px',
+              minWidth: '760px',
+            }}
+          >
+            <thead>
+              <tr>
+                <th style={headerCellStyle('left')}>Categoría</th>
+                {DIAS.map((dia) => (
+                  <th key={dia} style={headerCellStyle('center')}>
+                    {dia}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {CATEGORIAS.map((cat) => (
+                <tr key={cat}>
+                  <td className="menu-row-label" style={rowLabelStyle}>
+                    {CATEGORIA_LABEL[cat]}
                   </td>
-                );
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+                  {DIAS.map((_, diaIdx) => {
+                    const dish = semana[diaIdx][cat];
+                    const highlight = highlightWeek[diaIdx][cat];
+                    return (
+                      <td key={diaIdx} style={{ padding: 0 }}>
+                        <DishCell
+                          dish={dish}
+                          highlight={highlight}
+                          isFixed={!!FIXED_CATEGORIES[cat]}
+                          onRegenerate={() => onRegenerateCell(semanaIdx, diaIdx, cat)}
+                          onEdit={() => onOpenEdit(diaIdx, cat)}
+                        />
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="menu-scroll-fade" aria-hidden="true" />
+      </div>
     </div>
   );
 }
@@ -731,7 +817,7 @@ const rowLabelStyle = {
 };
 
 function DishCell({ dish, highlight, isFixed, onRegenerate, onEdit }) {
-  const [hover, setHover] = useState(false);
+  const [active, setActive] = useState(false);
   if (!dish) return null;
 
   const style = {
@@ -744,17 +830,19 @@ function DishCell({ dish, highlight, isFixed, onRegenerate, onEdit }) {
     fontSize: '13px',
     color: highlight ? highlight.text : 'var(--color-text-primary)',
     lineHeight: 1.4,
-    cursor: 'default',
+    cursor: isFixed ? 'default' : 'pointer',
   };
 
   return (
     <div
+      className="menu-dish-cell"
       style={style}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
+      onMouseEnter={() => !isFixed && setActive(true)}
+      onMouseLeave={() => !isFixed && setActive(false)}
+      onClick={() => !isFixed && setActive((v) => !v)}
     >
       <div>{dish.platillo}</div>
-      {hover && !isFixed && (
+      {active && !isFixed && (
         <div
           style={{
             position: 'absolute',
@@ -764,10 +852,24 @@ function DishCell({ dish, highlight, isFixed, onRegenerate, onEdit }) {
             gap: '4px',
           }}
         >
-          <button onClick={onRegenerate} title="Sustituir aleatoriamente" style={iconBtnStyle}>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onRegenerate();
+            }}
+            title="Sustituir aleatoriamente"
+            style={iconBtnStyle}
+          >
             <Shuffle size={12} />
           </button>
-          <button onClick={onEdit} title="Elegir manualmente" style={iconBtnStyle}>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit();
+            }}
+            title="Elegir manualmente"
+            style={iconBtnStyle}
+          >
             <Edit3 size={12} />
           </button>
         </div>
@@ -1036,33 +1138,106 @@ function NewClientModal({ onClose, onCreate }) {
   );
 }
 
-function exportToExcel(cycle, numSemanas, clientName) {
-  const aoa = [];
-  const headerRow1 = [];
-  const headerRow2 = ['DESAYUNO'];
+async function exportToExcel(cycle, numSemanas, clientName) {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Ciclo de menus');
 
+  const HEADER_BLUE = 'FF29ABE2';
+  const LABEL_GRAY = 'FFE8E8E8';
+  const BORDER = { style: 'thin', color: { argb: 'FFBFBFBF' } };
+  const thinBorder = { top: BORDER, bottom: BORDER, left: BORDER, right: BORDER };
+  const colsPerWeek = 6; // 5 días + 1 columna separadora
+
+  // Fila 1: "SEMANA 01" combinada sobre sus 5 días
+  let col = 2;
   cycle.forEach((_, sIdx) => {
-    headerRow1.push(`SEMANA ${String(sIdx + 1).padStart(2, '0')}`, '', '', '', '', '');
-    DIAS.forEach((d) => headerRow2.push(d));
-    if (sIdx < cycle.length - 1) headerRow2.push('');
+    const startCol = col;
+    const endCol = col + 4;
+    ws.mergeCells(1, startCol, 1, endCol);
+    const cell = ws.getCell(1, startCol);
+    cell.value = `SEMANA ${String(sIdx + 1).padStart(2, '0')}`;
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: HEADER_BLUE } };
+    cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+    col += colsPerWeek;
   });
-  aoa.push(headerRow1);
-  aoa.push(headerRow2);
 
-  CATEGORIAS.forEach((cat) => {
-    const row = [CATEGORIA_LABEL[cat]];
-    cycle.forEach((semana, sIdx) => {
-      DIAS.forEach((_, dIdx) => {
-        row.push(semana[dIdx][cat]?.platillo || '');
-      });
-      if (sIdx < cycle.length - 1) row.push('');
+  // Fila 2: nombre de cada día + "DESAYUNO" en A2
+  const labelHeaderCell = ws.getCell(2, 1);
+  labelHeaderCell.value = 'DESAYUNO';
+  labelHeaderCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: HEADER_BLUE } };
+  labelHeaderCell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  labelHeaderCell.alignment = { horizontal: 'center', vertical: 'middle' };
+
+  col = 2;
+  cycle.forEach(() => {
+    DIAS.forEach((dia) => {
+      const cell = ws.getCell(2, col);
+      cell.value = dia;
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: HEADER_BLUE } };
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      col++;
     });
-    aoa.push(row);
+    col++; // separador
   });
 
-  const ws = XLSX.utils.aoa_to_sheet(aoa);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Ciclo de menus');
+  // Filas de categorías
+  let rowIdx = 3;
+  CATEGORIAS.forEach((cat) => {
+    const labelCell = ws.getCell(rowIdx, 1);
+    labelCell.value = CATEGORIA_LABEL[cat];
+    labelCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: LABEL_GRAY } };
+    labelCell.font = { bold: true, size: 10 };
+    labelCell.alignment = { vertical: 'middle', wrapText: true };
+    labelCell.border = thinBorder;
+
+    let c = 2;
+    cycle.forEach((semana) => {
+      DIAS.forEach((_, dIdx) => {
+        const cell = ws.getCell(rowIdx, c);
+        cell.value = semana[dIdx][cat]?.platillo || '';
+        cell.alignment = { vertical: 'middle', wrapText: true };
+        cell.border = thinBorder;
+        cell.font = { size: 10 };
+        c++;
+      });
+      c++; // separador
+    });
+    rowIdx++;
+  });
+
+  // Anchos de columna
+  ws.getColumn(1).width = 28;
+  let c = 2;
+  cycle.forEach(() => {
+    for (let i = 0; i < 5; i++) {
+      ws.getColumn(c).width = 22;
+      c++;
+    }
+    ws.getColumn(c).width = 3; // separador angosto
+    c++;
+  });
+
+  // Alto de filas para que el texto envuelto se vea completo
+  for (let r = 3; r < rowIdx; r++) {
+    ws.getRow(r).height = 45;
+  }
+
+  // Congela encabezados (filas 1-2) y la columna de categorías
+  ws.views = [{ state: 'frozen', xSplit: 1, ySplit: 2 }];
+
+  const buffer = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
   const safeClient = (clientName || 'cliente').replace(/[^a-z0-9]+/gi, '_');
-  XLSX.writeFile(wb, `ciclo_menus_${safeClient}_${numSemanas}semanas.xlsx`);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `ciclo_menus_${safeClient}_${numSemanas}semanas.xlsx`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
