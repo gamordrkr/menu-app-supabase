@@ -417,16 +417,62 @@ export default function MenuGenerator() {
         }
         .menu-btn-label { display: inline; }
 
+        /* --- Tabla con encabezado y primera columna fijos (sticky) --- */
         .menu-scroll-wrap {
           position: relative;
+          border: 0.5px solid var(--color-border-tertiary);
+          border-radius: var(--border-radius-lg);
+          overflow: hidden;
         }
         .menu-scroll-area {
-          overflow-x: auto;
+          overflow: auto;
           -webkit-overflow-scrolling: touch;
           scrollbar-width: thin;
+          max-height: 70vh;
+        }
+        .menu-table {
+          border-collapse: separate;
+          border-spacing: 0;
+          width: 100%;
+        }
+        .menu-table thead th {
+          position: sticky;
+          top: 0;
+          z-index: 2;
+          background: var(--color-background-info);
+          color: var(--color-text-info);
+        }
+        .menu-table thead th.menu-corner {
+          left: 0;
+          z-index: 3;
+        }
+        .menu-row-label {
+          position: sticky;
+          left: 0;
+          z-index: 1;
+          background: var(--color-background-secondary);
+          box-shadow: 1px 0 0 0 var(--color-border-tertiary);
         }
         .menu-scroll-fade {
           display: none;
+        }
+
+        .menu-dish-cell-wrap { transition: border-color 0.15s ease; }
+        .menu-dish-actions {
+          position: absolute;
+          top: 6px;
+          right: 6px;
+          display: flex;
+          gap: 4px;
+          opacity: 0.55;
+          transition: opacity 0.15s ease;
+        }
+        .menu-dish-cell-wrap:hover .menu-dish-actions,
+        .menu-dish-actions:focus-within {
+          opacity: 1;
+        }
+        .menu-dish-actions button:hover {
+          background: rgba(0,0,0,0.16) !important;
         }
 
         @media (max-width: 680px) {
@@ -449,19 +495,22 @@ export default function MenuGenerator() {
             margin-left: 0 !important;
             width: 100%;
           }
-          .menu-table { min-width: 600px !important; }
-          .menu-table th, .menu-table .menu-row-label { font-size: 11px !important; }
-          .menu-dish-cell { font-size: 12px !important; padding: 8px 8px !important; min-height: 52px !important; }
-          .menu-row-label { width: 110px !important; padding: 6px !important; }
+          .menu-table { min-width: 540px; }
+          .menu-table th { font-size: 11px !important; padding: 8px 6px !important; }
+          .menu-row-label { font-size: 11px !important; width: 92px !important; min-width: 92px !important; padding: 6px !important; }
+          .menu-dish-cell-wrap { font-size: 12px !important; padding: 8px !important; min-height: 56px !important; }
+          .menu-dish-actions { opacity: 1 !important; gap: 6px !important; }
+          .menu-dish-actions button { width: 30px !important; height: 30px !important; }
           .menu-scroll-fade {
             display: block;
             position: absolute;
             top: 0;
             right: 0;
             bottom: 0;
-            width: 28px;
+            width: 18px;
             pointer-events: none;
-            background: linear-gradient(to right, transparent, var(--color-background-primary) 90%);
+            background: linear-gradient(to right, transparent, var(--color-background-primary) 95%);
+            z-index: 4;
           }
         }
       `}</style>
@@ -747,14 +796,14 @@ function WeekTable({ semanaIdx, semana, highlightWeek, onRegenerateCell, onOpenE
             className="menu-table"
             style={{
               width: '100%',
-              borderCollapse: 'separate',
-              borderSpacing: '4px',
               minWidth: '760px',
             }}
           >
             <thead>
               <tr>
-                <th style={headerCellStyle('left')}>Categoría</th>
+                <th className="menu-corner" style={headerCellStyle('left')}>
+                  Categoría
+                </th>
                 {DIAS.map((dia) => (
                   <th key={dia} style={headerCellStyle('center')}>
                     {dia}
@@ -772,7 +821,7 @@ function WeekTable({ semanaIdx, semana, highlightWeek, onRegenerateCell, onOpenE
                     const dish = semana[diaIdx][cat];
                     const highlight = highlightWeek[diaIdx][cat];
                     return (
-                      <td key={diaIdx} style={{ padding: 0 }}>
+                      <td key={diaIdx} style={{ padding: '4px' }}>
                         <DishCell
                           dish={dish}
                           highlight={highlight}
@@ -798,9 +847,8 @@ function headerCellStyle(align) {
   return {
     fontSize: '12px',
     fontWeight: 500,
-    color: 'var(--color-text-secondary)',
     textAlign: align,
-    padding: '6px 10px',
+    padding: '10px 12px',
     textTransform: 'uppercase',
     letterSpacing: '0.02em',
   };
@@ -810,14 +858,14 @@ const rowLabelStyle = {
   fontSize: '13px',
   fontWeight: 500,
   color: 'var(--color-text-secondary)',
-  padding: '8px 10px',
-  whiteSpace: 'nowrap',
-  verticalAlign: 'top',
+  padding: '10px 12px',
+  whiteSpace: 'normal',
+  verticalAlign: 'middle',
   width: '160px',
+  minWidth: '160px',
 };
 
 function DishCell({ dish, highlight, isFixed, onRegenerate, onEdit }) {
-  const [active, setActive] = useState(false);
   if (!dish) return null;
 
   const style = {
@@ -830,37 +878,23 @@ function DishCell({ dish, highlight, isFixed, onRegenerate, onEdit }) {
     fontSize: '13px',
     color: highlight ? highlight.text : 'var(--color-text-primary)',
     lineHeight: 1.4,
-    cursor: isFixed ? 'default' : 'pointer',
   };
 
   return (
-    <div
-      className="menu-dish-cell"
-      style={style}
-      onMouseEnter={() => !isFixed && setActive(true)}
-      onMouseLeave={() => !isFixed && setActive(false)}
-      onClick={() => !isFixed && setActive((v) => !v)}
-    >
-      <div>{dish.platillo}</div>
-      {active && !isFixed && (
-        <div
-          style={{
-            position: 'absolute',
-            top: '4px',
-            right: '4px',
-            display: 'flex',
-            gap: '4px',
-          }}
-        >
+    <div className="menu-dish-cell-wrap" style={style}>
+      <div style={{ paddingRight: isFixed ? 0 : '52px' }}>{dish.platillo}</div>
+      {!isFixed && (
+        <div className="menu-dish-actions">
           <button
             onClick={(e) => {
               e.stopPropagation();
               onRegenerate();
             }}
             title="Sustituir aleatoriamente"
+            aria-label="Sustituir platillo aleatoriamente"
             style={iconBtnStyle}
           >
-            <Shuffle size={12} />
+            <Shuffle size={13} />
           </button>
           <button
             onClick={(e) => {
@@ -868,9 +902,10 @@ function DishCell({ dish, highlight, isFixed, onRegenerate, onEdit }) {
               onEdit();
             }}
             title="Elegir manualmente"
+            aria-label="Elegir platillo manualmente"
             style={iconBtnStyle}
           >
-            <Edit3 size={12} />
+            <Edit3 size={13} />
           </button>
         </div>
       )}
@@ -882,9 +917,9 @@ const iconBtnStyle = {
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  width: '20px',
-  height: '20px',
-  borderRadius: '4px',
+  width: '26px',
+  height: '26px',
+  borderRadius: '6px',
   border: 'none',
   background: 'rgba(0,0,0,0.08)',
   color: 'inherit',
