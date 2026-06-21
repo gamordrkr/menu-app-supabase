@@ -222,8 +222,37 @@ export default function MenuGenerator() {
   const [saveStatus, setSaveStatus] = useState('idle'); // idle | saving | saved | error
   const [loadError, setLoadError] = useState('');
   const [exporting, setExporting] = useState(false);
+  const [toolbarCollapsed, setToolbarCollapsed] = useState(false);
   const catalog = clients[activeClient]?.catalog || [];
   const byCat = useMemo(() => buildIndexByCategory(catalog), [catalog]);
+
+  // --- Colapsa la barra superior al deslizar hacia abajo (solo afecta layout móvil vía CSS) ---
+  useEffect(() => {
+    let lastY = window.scrollY;
+    let ticking = false;
+    const THRESHOLD = 8; // px mínimos de movimiento para no reaccionar a micro-scrolls
+
+    const onScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        const currentY = window.scrollY;
+        const delta = currentY - lastY;
+        if (Math.abs(delta) > THRESHOLD) {
+          if (delta > 0 && currentY > 80) {
+            setToolbarCollapsed(true);
+          } else if (delta < 0) {
+            setToolbarCollapsed(false);
+          }
+          lastY = currentY;
+        }
+        ticking = false;
+      });
+    };
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
   // --- Carga inicial: lista de clientes desde Supabase ---
   useEffect(() => {
@@ -404,6 +433,8 @@ export default function MenuGenerator() {
           flex-wrap: wrap;
           align-items: center;
           gap: 12px;
+          transition: max-height 0.25s ease, opacity 0.2s ease, padding 0.25s ease, margin 0.25s ease;
+          overflow: hidden;
         }
         .menu-toolbar-group {
           display: flex;
@@ -417,7 +448,21 @@ export default function MenuGenerator() {
         }
         .menu-btn-label { display: inline; }
 
-        /* --- Tabla con encabezado y primera columna fijos (sticky) --- */
+        .menu-toolbar-sticky {
+          position: sticky;
+          top: 0;
+          z-index: 20;
+          background: var(--color-background-primary);
+          padding-top: 4px;
+        }
+        .menu-toolbar-mini {
+          display: none;
+        }
+        .menu-toolbar-collapse-btn {
+          display: none;
+        }
+
+        /* --- Tabla con encabezado y primera columna fijos, CSS Grid plano (sin display:contents) --- */
         .menu-scroll-wrap {
           position: relative;
           border: 0.5px solid var(--color-border-tertiary);
@@ -429,48 +474,60 @@ export default function MenuGenerator() {
           overflow: auto;
           -webkit-overflow-scrolling: touch;
           scrollbar-width: thin;
-          max-height: 70vh;
+          max-height: 72vh;
         }
-        .menu-table {
-          border-collapse: separate;
-          border-spacing: 0;
-          width: 100%;
+        .menu-grid {
+          display: grid;
           background: var(--color-background-primary);
-          box-sizing: border-box;
         }
-        .menu-col-label { width: 18%; }
-        .menu-col-day { width: 16.4%; }
-
-        .menu-table th,
-        .menu-table td {
-          background: var(--color-background-primary);
+        .menu-cell {
           box-sizing: border-box;
+          background: var(--color-background-primary);
+          border-bottom: 0.5px solid var(--color-border-tertiary);
+          border-right: 0.5px solid var(--color-border-tertiary);
+          padding: 6px;
+          display: flex;
+          align-items: stretch;
           overflow: hidden;
+          min-width: 0;
+          min-height: 0;
         }
-        .menu-table thead th {
+        .menu-cell-corner,
+        .menu-cell-daylabel {
           position: sticky;
           top: 0;
-          z-index: 3;
-          background: var(--color-background-info) !important;
+          z-index: 5;
+          background: var(--color-background-info);
           color: var(--color-text-info);
-          box-shadow: 0 1px 0 0 var(--color-border-tertiary);
+          font-size: 12px;
+          font-weight: 500;
+          text-transform: uppercase;
+          letter-spacing: 0.02em;
+          padding: 10px 8px;
+          align-items: center;
         }
-        .menu-row-label {
+        .menu-cell-daylabel {
+          justify-content: center;
+          text-align: center;
+        }
+        .menu-cell-corner {
+          left: 0;
+          z-index: 6;
+          justify-content: flex-start;
+        }
+        .menu-cell-label {
           position: sticky;
           left: 0;
-          z-index: 2;
-          background: var(--color-background-secondary) !important;
-          box-shadow: 1px 0 0 0 var(--color-border-tertiary);
-        }
-        .menu-table thead th.menu-corner {
-          left: 0;
           z-index: 4;
-          background: var(--color-background-info) !important;
-          box-shadow: 1px 1px 0 0 var(--color-border-tertiary);
+          background: var(--color-background-secondary);
+          color: var(--color-text-secondary);
+          font-size: 13px;
+          font-weight: 500;
+          padding: 10px 8px;
+          align-items: center;
         }
-        .menu-dish-td {
+        .menu-cell-dish {
           padding: 4px;
-          vertical-align: top;
         }
         .menu-scroll-fade {
           display: none;
@@ -481,7 +538,7 @@ export default function MenuGenerator() {
           display: flex;
           flex-direction: column;
           justify-content: flex-start;
-          height: 100%;
+          width: 100%;
         }
         .menu-dish-text {
           flex: 1;
@@ -510,9 +567,36 @@ export default function MenuGenerator() {
         }
 
         @media (max-width: 680px) {
-          .menu-toolbar {
-            flex-direction: column;
-            align-items: stretch;
+          .menu-toolbar-mini {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 14px;
+            background: var(--color-background-secondary);
+            border-radius: var(--border-radius-lg);
+            margin-bottom: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            color: var(--color-text-secondary);
+          }
+          .menu-toolbar-mini-text {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+          }
+          .menu-toolbar-collapse-btn {
+            display: flex;
+            color: var(--color-text-tertiary);
+            margin-left: 8px;
+          }
+          .menu-toolbar.is-collapsed {
+            max-height: 0;
+            opacity: 0;
+            padding-top: 0;
+            padding-bottom: 0;
+            margin: 0;
+            pointer-events: none;
+            border-width: 0;
           }
           .menu-toolbar-group {
             justify-content: space-between;
@@ -529,12 +613,10 @@ export default function MenuGenerator() {
             margin-left: 0 !important;
             width: 100%;
           }
-          .menu-col-label { width: 96px; }
-          .menu-col-day { width: 108px; }
-          .menu-table { min-width: 0; }
-          .menu-table th { font-size: 11px !important; padding: 8px 6px !important; }
-          .menu-row-label { font-size: 11px !important; padding: 6px !important; }
-          .menu-dish-cell-wrap { font-size: 12px !important; padding: 8px !important; min-height: 56px !important; }
+          .menu-cell-corner,
+          .menu-cell-daylabel { font-size: 11px !important; padding: 8px 4px !important; }
+          .menu-cell-label { font-size: 11px !important; padding: 6px 4px !important; }
+          .menu-dish-cell-wrap { font-size: 12px !important; }
           .menu-dish-actions { opacity: 1 !important; gap: 6px !important; }
           .menu-dish-actions button { width: 30px !important; height: 30px !important; }
           .menu-scroll-fade {
@@ -546,7 +628,7 @@ export default function MenuGenerator() {
             width: 18px;
             pointer-events: none;
             background: linear-gradient(to right, transparent, var(--color-background-primary) 95%);
-            z-index: 4;
+            z-index: 7;
           }
         }
       `}</style>
@@ -562,6 +644,8 @@ export default function MenuGenerator() {
         exporting={exporting}
         catalogSize={catalog.length}
         saveStatus={saveStatus}
+        collapsed={toolbarCollapsed}
+        onToggleCollapsed={() => setToolbarCollapsed((v) => !v)}
       />
       {!hasClients ? (
         <EmptyState onAddClientClick={() => setShowNewClient(true)} />
@@ -640,90 +724,108 @@ function Toolbar({
   exporting,
   catalogSize,
   saveStatus,
+  collapsed,
+  onToggleCollapsed,
 }) {
+  const activeName = clients[activeClient]?.name || '';
   return (
-    <div
-      className="menu-toolbar"
-      style={{
-        padding: '16px',
-        background: 'var(--color-background-secondary)',
-        borderRadius: 'var(--border-radius-lg)',
-        marginBottom: '16px',
-        position: 'sticky',
-        top: 0,
-        zIndex: 10,
-      }}
-    >
-      <div className="menu-toolbar-group">
-        <label style={{ fontSize: '14px', color: 'var(--color-text-secondary)' }}>
-          Cliente:
-        </label>
-        <select
-          value={activeClient}
-          onChange={(e) => onClientChange(e.target.value)}
-          style={{ ...selectStyle, flex: 1 }}
+    <div className="menu-toolbar-sticky">
+      {collapsed && (
+        <div
+          className="menu-toolbar-mini"
+          onClick={onToggleCollapsed}
+          role="button"
+          tabIndex={0}
+          aria-expanded={!collapsed}
         >
-          {Object.entries(clients).map(([id, c]) => (
-            <option key={id} value={id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-        <button onClick={onAddClientClick} title="Agregar cliente" style={iconBtnLarge}>
-          <Plus size={15} />
-        </button>
-      </div>
-
-      <div className="menu-toolbar-group">
-        <label style={{ fontSize: '14px', color: 'var(--color-text-secondary)' }}>
-          Semanas:
-        </label>
-        <select
-          value={numSemanas}
-          onChange={(e) => onNumSemanasChange(Number(e.target.value))}
-          style={selectStyle}
-        >
-          {[1, 2, 3, 4, 6, 8].map((n) => (
-            <option key={n} value={n}>
-              {n}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div className="menu-toolbar-actions">
-        <button onClick={onRegenerate} disabled={catalogSize === 0} style={btnStyle('primary')}>
-          <RefreshCw size={15} /> <span className="menu-btn-label">Generar ciclo nuevo</span>
-        </button>
-
-        <button onClick={onExport} disabled={catalogSize === 0 || exporting} style={btnStyle('secondary')}>
-          {exporting ? <Loader2 size={15} className="spin" /> : <Download size={15} />}{' '}
-          <span className="menu-btn-label">{exporting ? 'Generando...' : 'Exportar a Excel'}</span>
-        </button>
-      </div>
-
+          <span className="menu-toolbar-mini-text">
+            {activeName} · {numSemanas} {numSemanas === 1 ? 'semana' : 'semanas'}
+          </span>
+          <span className="menu-toolbar-collapse-btn" aria-hidden="true">
+            ▾
+          </span>
+        </div>
+      )}
       <div
-        className="menu-toolbar-meta"
+        className={`menu-toolbar${collapsed ? ' is-collapsed' : ''}`}
         style={{
-          marginLeft: 'auto',
-          fontSize: '12px',
-          color: 'var(--color-text-tertiary)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px',
+          padding: '16px',
+          background: 'var(--color-background-secondary)',
+          borderRadius: 'var(--border-radius-lg)',
+          marginBottom: '16px',
         }}
       >
-        <span>{catalogSize} platillos en catálogo</span>
-        {saveStatus === 'saving' && (
-          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <Loader2 size={12} className="spin" /> Guardando...
-          </span>
-        )}
-        {saveStatus === 'saved' && (
-          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <Check size={12} /> Guardado
-          </span>
-        )}
+        <div className="menu-toolbar-group">
+          <label style={{ fontSize: '14px', color: 'var(--color-text-secondary)' }}>
+            Cliente:
+          </label>
+          <select
+            value={activeClient}
+            onChange={(e) => onClientChange(e.target.value)}
+            style={{ ...selectStyle, flex: 1 }}
+          >
+            {Object.entries(clients).map(([id, c]) => (
+              <option key={id} value={id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          <button onClick={onAddClientClick} title="Agregar cliente" style={iconBtnLarge}>
+            <Plus size={15} />
+          </button>
+        </div>
+
+        <div className="menu-toolbar-group">
+          <label style={{ fontSize: '14px', color: 'var(--color-text-secondary)' }}>
+            Semanas:
+          </label>
+          <select
+            value={numSemanas}
+            onChange={(e) => onNumSemanasChange(Number(e.target.value))}
+            style={selectStyle}
+          >
+            {[1, 2, 3, 4, 6, 8].map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="menu-toolbar-actions">
+          <button onClick={onRegenerate} disabled={catalogSize === 0} style={btnStyle('primary')}>
+            <RefreshCw size={15} /> <span className="menu-btn-label">Generar ciclo nuevo</span>
+          </button>
+
+          <button onClick={onExport} disabled={catalogSize === 0 || exporting} style={btnStyle('secondary')}>
+            {exporting ? <Loader2 size={15} className="spin" /> : <Download size={15} />}{' '}
+            <span className="menu-btn-label">{exporting ? 'Generando...' : 'Exportar a Excel'}</span>
+          </button>
+        </div>
+
+        <div
+          className="menu-toolbar-meta"
+          style={{
+            marginLeft: 'auto',
+            fontSize: '12px',
+            color: 'var(--color-text-tertiary)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+          }}
+        >
+          <span>{catalogSize} platillos en catálogo</span>
+          {saveStatus === 'saving' && (
+            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <Loader2 size={12} className="spin" /> Guardando...
+            </span>
+          )}
+          {saveStatus === 'saved' && (
+            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <Check size={12} /> Guardado
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -813,7 +915,12 @@ function EmptyClientState({ clientName }) {
   );
 }
 
+const LABEL_COL_WIDTH = 130; // px, ancho de la columna de categoría
+const DAY_COL_WIDTH = 160; // px, ancho de cada columna de día
+
 function WeekTable({ semanaIdx, semana, highlightWeek, onRegenerateCell, onOpenEdit }) {
+  const gridTemplateColumns = `${LABEL_COL_WIDTH}px repeat(${DIAS.length}, minmax(${DAY_COL_WIDTH}px, 1fr))`;
+
   return (
     <div style={{ marginBottom: '28px' }}>
       <div
@@ -828,57 +935,46 @@ function WeekTable({ semanaIdx, semana, highlightWeek, onRegenerateCell, onOpenE
       </div>
       <div className="menu-scroll-wrap">
         <div className="menu-scroll-area">
-          <table
-            className="menu-table"
-            style={{
-              width: '100%',
-              minWidth: '760px',
-              tableLayout: 'fixed',
-            }}
+          <div
+            className="menu-grid"
+            style={{ gridTemplateColumns, minWidth: LABEL_COL_WIDTH + DAY_COL_WIDTH * DIAS.length }}
+            role="table"
+            aria-label={`Menú semana ${semanaIdx + 1}`}
           >
-            <colgroup>
-              <col className="menu-col-label" />
-              {DIAS.map((dia) => (
-                <col key={dia} className="menu-col-day" />
-              ))}
-            </colgroup>
-            <thead>
-              <tr>
-                <th className="menu-corner" style={headerCellStyle('left')}>
-                  <span style={{ display: 'block', textAlign: 'left' }}>Categoría</span>
-                </th>
-                {DIAS.map((dia) => (
-                  <th key={dia} style={headerCellStyle('center')}>
-                    <span style={{ display: 'block', textAlign: 'center' }}>{dia}</span>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {CATEGORIAS.map((cat) => (
-                <tr key={cat}>
-                  <td className="menu-row-label" style={rowLabelStyle}>
-                    {CATEGORIA_LABEL[cat]}
-                  </td>
-                  {DIAS.map((_, diaIdx) => {
-                    const dish = semana[diaIdx][cat];
-                    const highlight = highlightWeek[diaIdx][cat];
-                    return (
-                      <td key={diaIdx} className="menu-dish-td">
-                        <DishCell
-                          dish={dish}
-                          highlight={highlight}
-                          isFixed={!!FIXED_CATEGORIES[cat]}
-                          onRegenerate={() => onRegenerateCell(semanaIdx, diaIdx, cat)}
-                          onEdit={() => onOpenEdit(diaIdx, cat)}
-                        />
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+            {/* Fila de encabezado: celdas hijas directas del grid, sin wrapper de fila */}
+            <div className="menu-cell menu-cell-corner" role="columnheader">
+              Categoría
+            </div>
+            {DIAS.map((dia) => (
+              <div key={dia} className="menu-cell menu-cell-daylabel" role="columnheader">
+                {dia}
+              </div>
+            ))}
+
+            {/* Filas de categorías, cada una un Fragment (no agrega nodo al DOM) */}
+            {CATEGORIAS.map((cat) => (
+              <React.Fragment key={cat}>
+                <div className="menu-cell menu-cell-label" role="rowheader">
+                  {CATEGORIA_LABEL[cat]}
+                </div>
+                {DIAS.map((_, diaIdx) => {
+                  const dish = semana[diaIdx][cat];
+                  const highlight = highlightWeek[diaIdx][cat];
+                  return (
+                    <div className="menu-cell menu-cell-dish" role="cell" key={diaIdx}>
+                      <DishCell
+                        dish={dish}
+                        highlight={highlight}
+                        isFixed={!!FIXED_CATEGORIES[cat]}
+                        onRegenerate={() => onRegenerateCell(semanaIdx, diaIdx, cat)}
+                        onEdit={() => onOpenEdit(diaIdx, cat)}
+                      />
+                    </div>
+                  );
+                })}
+              </React.Fragment>
+            ))}
+          </div>
         </div>
         <div className="menu-scroll-fade" aria-hidden="true" />
       </div>
