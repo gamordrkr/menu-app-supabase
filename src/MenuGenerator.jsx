@@ -46,6 +46,18 @@ const CATEGORIA_LABEL = {
   COMPLEMENTOS: 'COMPLEMENTOS (PAN, TORTILLA, SALSA Y LIMONES)',
 };
 
+// Versión corta solo para la columna de categoría de la tabla en pantalla.
+// El Excel exportado y el modal de edición siguen usando CATEGORIA_LABEL completo.
+const CATEGORIA_LABEL_TABLA = {
+  'AVENA CALIENTE': 'AVENA',
+  'GUARNICION 1': 'GUARNICION 1',
+  'GUARNICION 2': 'GUARNICION 2',
+  'PLATO FUERTE HUEVO': 'P. FUERTE HUEVO',
+  'PLATO FUERTE MEXICANO O DULCE': 'P. FUERTE MEX/DULCE',
+  'PLATO FUERTE VEGETARIANO / VEGANO': 'P. FUERTE VEGETARIANO',
+  COMPLEMENTOS: 'COMPLEMENTOS',
+};
+
 const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
 
 const FAMILY_COLORS = [
@@ -554,27 +566,29 @@ export default function MenuGenerator() {
         }
         .menu-dish-text {
           flex: 1;
+          overflow: hidden;
         }
         .menu-dish-text-clamp {
           display: -webkit-box;
-          -webkit-line-clamp: 3;
+          -webkit-line-clamp: 2;
           -webkit-box-orient: vertical;
           overflow: hidden;
         }
-        .menu-dish-actions {
-          position: absolute;
-          top: 4px;
-          right: 4px;
+        .menu-dish-actions-row {
           display: flex;
+          justify-content: flex-end;
           gap: 3px;
-          opacity: 0.55;
+          flex-shrink: 0;
+          height: 18px;
+          margin-bottom: 2px;
+          opacity: 0.5;
           transition: opacity 0.15s ease;
         }
-        .menu-dish-cell-wrap:hover .menu-dish-actions,
-        .menu-dish-actions:focus-within {
+        .menu-dish-cell-wrap:hover .menu-dish-actions-row,
+        .menu-dish-actions-row:focus-within {
           opacity: 1;
         }
-        .menu-dish-actions button:hover {
+        .menu-dish-actions-row button:hover {
           background: rgba(0,0,0,0.16) !important;
         }
 
@@ -629,8 +643,7 @@ export default function MenuGenerator() {
           .menu-cell-daylabel { font-size: 11px !important; padding: 8px 4px !important; }
           .menu-cell-label { font-size: 11px !important; padding: 6px 4px !important; }
           .menu-dish-cell-wrap { font-size: 12px !important; }
-          .menu-dish-actions { opacity: 1 !important; gap: 6px !important; }
-          .menu-dish-actions button { width: 30px !important; height: 30px !important; }
+          .menu-dish-actions-row { opacity: 1 !important; }
           .menu-scroll-fade {
             display: block;
             position: absolute;
@@ -927,10 +940,10 @@ function EmptyClientState({ clientName }) {
   );
 }
 
-const LABEL_COL_WIDTH = 96; // px, ancho de la columna de categoría (fuera del scroll horizontal)
-const DAY_COL_WIDTH = 118; // px, ancho de cada columna de día (dentro del scroll horizontal)
-const HEADER_ROW_H = 38; // px, alto de la fila de encabezado (días)
-const BODY_ROW_H = 78; // px, alto de cada fila de categoría (suficiente para 3 líneas truncadas)
+const LABEL_COL_WIDTH = 100; // px, ancho de la columna de categoría (fuera del scroll horizontal)
+const DAY_COL_WIDTH = 116; // px, ancho de cada columna de día (dentro del scroll horizontal)
+const HEADER_ROW_H = 36; // px, alto de la fila de encabezado (días)
+const BODY_ROW_H = 86; // px, alto de cada fila de categoría
 
 function WeekTable({ semanaIdx, semana, highlightWeek, onRegenerateCell, onOpenEdit }) {
   return (
@@ -964,7 +977,7 @@ function WeekTable({ semanaIdx, semana, highlightWeek, onRegenerateCell, onOpenE
                 style={{ height: BODY_ROW_H }}
                 role="rowheader"
               >
-                {CATEGORIA_LABEL[cat]}
+                {CATEGORIA_LABEL_TABLA[cat]}
               </div>
             ))}
           </div>
@@ -1047,33 +1060,24 @@ function DishCell({ dish, highlight, isFixed, onRegenerate, onEdit }) {
   if (!dish) return null;
 
   const style = {
-    position: 'relative',
     background: highlight ? highlight.bg : 'var(--color-background-primary)',
     border: `1px solid ${highlight ? highlight.border : 'var(--color-border-tertiary)'}`,
     borderRadius: 'var(--border-radius-md)',
-    padding: '8px 10px',
+    padding: isFixed ? '8px 10px' : '4px 8px 8px',
     height: '100%',
     boxSizing: 'border-box',
     fontSize: '12px',
     color: highlight ? highlight.text : 'var(--color-text-primary)',
-    lineHeight: 1.35,
+    lineHeight: 1.3,
   };
 
-  // Texto largo (más de ~34 caracteres) se trunca a 3 líneas; el resto se ve completo.
-  const isLong = dish.platillo.length > 34;
+  // Texto largo se trunca a 2 líneas; el resto se ve completo con tap.
+  const isLong = dish.platillo.length > 30;
 
   return (
     <div className="menu-dish-cell-wrap" style={style}>
-      <div
-        className={isLong ? 'menu-dish-text menu-dish-text-clamp' : 'menu-dish-text'}
-        style={{ paddingRight: isFixed ? 0 : '40px', cursor: isLong ? 'pointer' : 'default' }}
-        onClick={isLong ? (e) => { e.stopPropagation(); setShowFull(true); } : undefined}
-        title={isLong ? dish.platillo : undefined}
-      >
-        {dish.platillo}
-      </div>
       {!isFixed && (
-        <div className="menu-dish-actions">
+        <div className="menu-dish-actions-row">
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -1098,6 +1102,14 @@ function DishCell({ dish, highlight, isFixed, onRegenerate, onEdit }) {
           </button>
         </div>
       )}
+      <div
+        className={isLong ? 'menu-dish-text menu-dish-text-clamp' : 'menu-dish-text'}
+        style={{ cursor: isLong ? 'pointer' : 'default' }}
+        onClick={isLong ? (e) => { e.stopPropagation(); setShowFull(true); } : undefined}
+        title={isLong ? dish.platillo : undefined}
+      >
+        {dish.platillo}
+      </div>
       {showFull && (
         <div
           role="dialog"
