@@ -423,6 +423,7 @@ export default function MenuGenerator() {
           border: 0.5px solid var(--color-border-tertiary);
           border-radius: var(--border-radius-lg);
           overflow: hidden;
+          background: var(--color-background-primary);
         }
         .menu-scroll-area {
           overflow: auto;
@@ -434,30 +435,63 @@ export default function MenuGenerator() {
           border-collapse: separate;
           border-spacing: 0;
           width: 100%;
+          background: var(--color-background-primary);
+          box-sizing: border-box;
+        }
+        .menu-col-label { width: 18%; }
+        .menu-col-day { width: 16.4%; }
+
+        .menu-table th,
+        .menu-table td {
+          background: var(--color-background-primary);
+          box-sizing: border-box;
+          overflow: hidden;
         }
         .menu-table thead th {
           position: sticky;
           top: 0;
-          z-index: 2;
-          background: var(--color-background-info);
-          color: var(--color-text-info);
-        }
-        .menu-table thead th.menu-corner {
-          left: 0;
           z-index: 3;
+          background: var(--color-background-info) !important;
+          color: var(--color-text-info);
+          box-shadow: 0 1px 0 0 var(--color-border-tertiary);
         }
         .menu-row-label {
           position: sticky;
           left: 0;
-          z-index: 1;
-          background: var(--color-background-secondary);
+          z-index: 2;
+          background: var(--color-background-secondary) !important;
           box-shadow: 1px 0 0 0 var(--color-border-tertiary);
+        }
+        .menu-table thead th.menu-corner {
+          left: 0;
+          z-index: 4;
+          background: var(--color-background-info) !important;
+          box-shadow: 1px 1px 0 0 var(--color-border-tertiary);
+        }
+        .menu-dish-td {
+          padding: 4px;
+          vertical-align: top;
         }
         .menu-scroll-fade {
           display: none;
         }
 
-        .menu-dish-cell-wrap { transition: border-color 0.15s ease; }
+        .menu-dish-cell-wrap {
+          transition: border-color 0.15s ease;
+          display: flex;
+          flex-direction: column;
+          justify-content: flex-start;
+          height: 100%;
+        }
+        .menu-dish-text {
+          flex: 1;
+        }
+        .menu-dish-text-clamp {
+          display: -webkit-box;
+          -webkit-line-clamp: 3;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+        }
         .menu-dish-actions {
           position: absolute;
           top: 6px;
@@ -495,9 +529,11 @@ export default function MenuGenerator() {
             margin-left: 0 !important;
             width: 100%;
           }
-          .menu-table { min-width: 540px; }
+          .menu-col-label { width: 96px; }
+          .menu-col-day { width: 108px; }
+          .menu-table { min-width: 0; }
           .menu-table th { font-size: 11px !important; padding: 8px 6px !important; }
-          .menu-row-label { font-size: 11px !important; width: 92px !important; min-width: 92px !important; padding: 6px !important; }
+          .menu-row-label { font-size: 11px !important; padding: 6px !important; }
           .menu-dish-cell-wrap { font-size: 12px !important; padding: 8px !important; min-height: 56px !important; }
           .menu-dish-actions { opacity: 1 !important; gap: 6px !important; }
           .menu-dish-actions button { width: 30px !important; height: 30px !important; }
@@ -699,7 +735,7 @@ const selectStyle = {
   border: '1px solid var(--color-border-secondary)',
   background: 'var(--color-background-primary)',
   color: 'var(--color-text-primary)',
-  fontSize: '14px',
+  fontSize: '16px',
 };
 
 function btnStyle(variant) {
@@ -797,16 +833,23 @@ function WeekTable({ semanaIdx, semana, highlightWeek, onRegenerateCell, onOpenE
             style={{
               width: '100%',
               minWidth: '760px',
+              tableLayout: 'fixed',
             }}
           >
+            <colgroup>
+              <col className="menu-col-label" />
+              {DIAS.map((dia) => (
+                <col key={dia} className="menu-col-day" />
+              ))}
+            </colgroup>
             <thead>
               <tr>
                 <th className="menu-corner" style={headerCellStyle('left')}>
-                  Categoría
+                  <span style={{ display: 'block', textAlign: 'left' }}>Categoría</span>
                 </th>
                 {DIAS.map((dia) => (
                   <th key={dia} style={headerCellStyle('center')}>
-                    {dia}
+                    <span style={{ display: 'block', textAlign: 'center' }}>{dia}</span>
                   </th>
                 ))}
               </tr>
@@ -821,7 +864,7 @@ function WeekTable({ semanaIdx, semana, highlightWeek, onRegenerateCell, onOpenE
                     const dish = semana[diaIdx][cat];
                     const highlight = highlightWeek[diaIdx][cat];
                     return (
-                      <td key={diaIdx} style={{ padding: '4px' }}>
+                      <td key={diaIdx} className="menu-dish-td">
                         <DishCell
                           dish={dish}
                           highlight={highlight}
@@ -861,11 +904,11 @@ const rowLabelStyle = {
   padding: '10px 12px',
   whiteSpace: 'normal',
   verticalAlign: 'middle',
-  width: '160px',
-  minWidth: '160px',
+  wordBreak: 'break-word',
 };
 
 function DishCell({ dish, highlight, isFixed, onRegenerate, onEdit }) {
+  const [showFull, setShowFull] = useState(false);
   if (!dish) return null;
 
   const style = {
@@ -875,14 +918,26 @@ function DishCell({ dish, highlight, isFixed, onRegenerate, onEdit }) {
     borderRadius: 'var(--border-radius-md)',
     padding: '10px 12px',
     minHeight: '64px',
+    height: '100%',
+    boxSizing: 'border-box',
     fontSize: '13px',
     color: highlight ? highlight.text : 'var(--color-text-primary)',
     lineHeight: 1.4,
   };
 
+  // Texto largo (más de ~38 caracteres) se trunca a 3 líneas; el resto se ve completo.
+  const isLong = dish.platillo.length > 38;
+
   return (
     <div className="menu-dish-cell-wrap" style={style}>
-      <div style={{ paddingRight: isFixed ? 0 : '52px' }}>{dish.platillo}</div>
+      <div
+        className={isLong ? 'menu-dish-text menu-dish-text-clamp' : 'menu-dish-text'}
+        style={{ paddingRight: isFixed ? 0 : '52px', cursor: isLong ? 'pointer' : 'default' }}
+        onClick={isLong ? (e) => { e.stopPropagation(); setShowFull(true); } : undefined}
+        title={isLong ? dish.platillo : undefined}
+      >
+        {dish.platillo}
+      </div>
       {!isFixed && (
         <div className="menu-dish-actions">
           <button
@@ -907,6 +962,42 @@ function DishCell({ dish, highlight, isFixed, onRegenerate, onEdit }) {
           >
             <Edit3 size={13} />
           </button>
+        </div>
+      )}
+      {showFull && (
+        <div
+          role="dialog"
+          aria-label="Nombre completo del platillo"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.45)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 60,
+          }}
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowFull(false);
+          }}
+        >
+          <div
+            style={{
+              background: 'var(--color-background-primary)',
+              color: 'var(--color-text-primary)',
+              borderRadius: 'var(--border-radius-lg)',
+              padding: '18px 20px',
+              maxWidth: 'calc(100vw - 48px)',
+              width: '340px',
+              fontSize: '14px',
+              lineHeight: 1.5,
+              boxSizing: 'border-box',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {dish.platillo}
+          </div>
         </div>
       )}
     </div>
@@ -951,9 +1042,11 @@ function EditModal({ categoria, options, current, onSelect, onClose }) {
           borderRadius: 'var(--border-radius-lg)',
           padding: '20px',
           width: '420px',
+          maxWidth: 'calc(100vw - 32px)',
           maxHeight: '70vh',
           display: 'flex',
           flexDirection: 'column',
+          boxSizing: 'border-box',
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -978,13 +1071,15 @@ function EditModal({ categoria, options, current, onSelect, onClose }) {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           style={{
-            padding: '8px 10px',
+            padding: '10px',
             borderRadius: 'var(--border-radius-md)',
             border: '1px solid var(--color-border-secondary)',
             background: 'var(--color-background-primary)',
             color: 'var(--color-text-primary)',
-            fontSize: '14px',
+            fontSize: '16px',
             marginBottom: '10px',
+            boxSizing: 'border-box',
+            width: '100%',
           }}
         />
         <div style={{ overflowY: 'auto', flex: 1 }}>
@@ -1125,12 +1220,12 @@ function NewClientModal({ onClose, onCreate }) {
           onChange={(e) => setName(e.target.value)}
           style={{
             width: '100%',
-            padding: '8px 10px',
+            padding: '10px',
             borderRadius: 'var(--border-radius-md)',
             border: '1px solid var(--color-border-secondary)',
             background: 'var(--color-background-primary)',
             color: 'var(--color-text-primary)',
-            fontSize: '14px',
+            fontSize: '16px',
             marginTop: '6px',
             marginBottom: '16px',
             boxSizing: 'border-box',
