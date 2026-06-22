@@ -593,12 +593,15 @@ export default function MenuGenerator() {
 
         .menu-info-backdrop {
           position: fixed;
-          inset: 0;
-          background: rgba(0,0,0,0.5);
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0,0,0,0.6);
           display: flex;
           align-items: center;
           justify-content: center;
-          z-index: 60;
+          z-index: 999;
           padding: 24px;
           box-sizing: border-box;
         }
@@ -607,11 +610,14 @@ export default function MenuGenerator() {
           color: var(--color-text-primary);
           border-radius: var(--border-radius-lg);
           padding: 18px 20px;
-          width: 360px;
-          max-width: 100%;
+          width: 100%;
+          max-width: 340px;
           max-height: 80vh;
           overflow-y: auto;
           box-sizing: border-box;
+          position: relative;
+          z-index: 1000;
+          box-shadow: 0 8px 32px rgba(0,0,0,0.4);
         }
         .menu-info-title {
           font-size: 15px;
