@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo, useCallback, createPortal } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import {
   RefreshCw,
   Download,
@@ -220,6 +221,7 @@ export default function MenuGenerator() {
   const [seed, setSeed] = useState(1);
   const [cycle, setCycle] = useState(null);
   const [editing, setEditing] = useState(null);
+  const [infoModal, setInfoModal] = useState(null); // { platillo, conflicts } | null
   const [loaded, setLoaded] = useState(false);
   const [showNewClient, setShowNewClient] = useState(false);
   const [saveStatus, setSaveStatus] = useState('idle'); // idle | saving | saved | error
@@ -739,6 +741,7 @@ export default function MenuGenerator() {
                 onOpenEdit={(diaIdx, categoria) =>
                   setEditing({ semana: semanaIdx, dia: diaIdx, categoria })
                 }
+                onOpenInfo={(platillo, conflicts) => setInfoModal({ platillo, conflicts })}
               />
             ))}
         </>
@@ -752,6 +755,13 @@ export default function MenuGenerator() {
             handleSelectDish(editing.semana, editing.dia, editing.categoria, dish)
           }
           onClose={() => setEditing(null)}
+        />
+      )}
+      {infoModal && (
+        <InfoModal
+          platillo={infoModal.platillo}
+          conflicts={infoModal.conflicts}
+          onClose={() => setInfoModal(null)}
         />
       )}
       {showNewClient && (
@@ -993,7 +1003,7 @@ const DAY_COL_WIDTH = 116; // px, ancho de cada columna de día (dentro del scro
 const HEADER_ROW_H = 36; // px, alto de la fila de encabezado (días)
 const BODY_ROW_H = 86; // px, alto de cada fila de categoría
 
-function WeekTable({ semanaIdx, semana, highlightWeek, onRegenerateCell, onOpenEdit }) {
+function WeekTable({ semanaIdx, semana, highlightWeek, onRegenerateCell, onOpenEdit, onOpenInfo }) {
   return (
     <div style={{ marginBottom: '24px' }}>
       <div
@@ -1068,6 +1078,7 @@ function WeekTable({ semanaIdx, semana, highlightWeek, onRegenerateCell, onOpenE
                         isFixed={!!FIXED_CATEGORIES[cat]}
                         onRegenerate={() => onRegenerateCell(semanaIdx, diaIdx, cat)}
                         onEdit={() => onOpenEdit(diaIdx, cat)}
+                        onOpenInfo={onOpenInfo}
                       />
                     </div>
                   );
@@ -1103,8 +1114,7 @@ const rowLabelStyle = {
   wordBreak: 'break-word',
 };
 
-function DishCell({ dish, highlight, isFixed, onRegenerate, onEdit }) {
-  const [showInfo, setShowInfo] = useState(false);
+function DishCell({ dish, highlight, isFixed, onRegenerate, onEdit, onOpenInfo }) {
   if (!dish) return null;
 
   const hasConflict = !!highlight;
@@ -1120,20 +1130,22 @@ function DishCell({ dish, highlight, isFixed, onRegenerate, onEdit }) {
     lineHeight: 1.3,
   };
 
-  // Texto largo se trunca a 2 líneas. Se puede tocar para ver el detalle si
-  // el texto es largo O si hay conflicto de repetición (info útil en ambos casos).
   const isLong = dish.platillo.length > 30;
   const isTappable = isLong || hasConflict;
+
+  const handleTap = isTappable
+    ? (e) => {
+        e.stopPropagation();
+        onOpenInfo(dish.platillo, hasConflict ? highlight.conflicts : null);
+      }
+    : undefined;
 
   return (
     <div className="menu-dish-cell-wrap" style={style}>
       {!isFixed && (
         <div className="menu-dish-actions-row">
           <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onRegenerate();
-            }}
+            onClick={(e) => { e.stopPropagation(); onRegenerate(); }}
             title="Sustituir aleatoriamente"
             aria-label="Sustituir platillo aleatoriamente"
             style={iconBtnStyle}
@@ -1141,10 +1153,7 @@ function DishCell({ dish, highlight, isFixed, onRegenerate, onEdit }) {
             <Shuffle size={11} />
           </button>
           <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onEdit();
-            }}
+            onClick={(e) => { e.stopPropagation(); onEdit(); }}
             title="Elegir manualmente"
             aria-label="Elegir platillo manualmente"
             style={iconBtnStyle}
@@ -1156,45 +1165,12 @@ function DishCell({ dish, highlight, isFixed, onRegenerate, onEdit }) {
       <div
         className={isLong ? 'menu-dish-text menu-dish-text-clamp' : 'menu-dish-text'}
         style={{ cursor: isTappable ? 'pointer' : 'default' }}
-        onClick={isTappable ? (e) => { e.stopPropagation(); setShowInfo(true); } : undefined}
+        onClick={handleTap}
         title={isLong ? dish.platillo : undefined}
       >
         {dish.platillo}
         {hasConflict && <AlertTriangle size={11} className="menu-conflict-icon" aria-label="Se repite" />}
       </div>
-      {showInfo && createPortal(
-        <div
-          role="dialog"
-          aria-label="Detalle del platillo"
-          className="menu-info-backdrop"
-          onClick={(e) => {
-            e.stopPropagation();
-            setShowInfo(false);
-          }}
-        >
-          <div className="menu-info-box" onClick={(e) => e.stopPropagation()}>
-            <div className="menu-info-title">{dish.platillo}</div>
-            {hasConflict && (
-              <>
-                <div className="menu-info-subtitle">
-                  Se repite (misma familia) en {highlight.conflicts.length === 1 ? 'esta otra fecha' : 'estas otras fechas'}, dentro de las {COOLDOWN_WEEKS} semanas de margen:
-                </div>
-                <ul className="menu-info-list">
-                  {highlight.conflicts.map((c, i) => (
-                    <li key={i}>
-                      <strong>Semana {c.semanaIdx + 1}, {DIAS[c.diaIdx]}:</strong> {c.platillo}
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
-            <button className="menu-info-close" onClick={() => setShowInfo(false)}>
-              Cerrar
-            </button>
-          </div>
-        </div>,
-        document.body
-      )}
     </div>
   );
 }
@@ -1211,6 +1187,34 @@ const iconBtnStyle = {
   color: 'inherit',
   cursor: 'pointer',
 };
+
+function InfoModal({ platillo, conflicts, onClose }) {
+  return createPortal(
+    <div className="menu-info-backdrop" onClick={onClose}>
+      <div className="menu-info-box" onClick={(e) => e.stopPropagation()}>
+        <div className="menu-info-title">{platillo}</div>
+        {conflicts && conflicts.length > 0 && (
+          <>
+            <div className="menu-info-subtitle">
+              Se repite (misma familia) en {conflicts.length === 1 ? 'esta otra fecha' : 'estas otras fechas'}, dentro de las {COOLDOWN_WEEKS} semanas de margen:
+            </div>
+            <ul className="menu-info-list">
+              {conflicts.map((c, i) => (
+                <li key={i}>
+                  <strong>Semana {c.semanaIdx + 1}, {DIAS[c.diaIdx]}:</strong> {c.platillo}
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+        <button className="menu-info-close" onClick={onClose}>
+          Cerrar
+        </button>
+      </div>
+    </div>,
+    document.body
+  );
+}
 
 function EditModal({ categoria, options, current, onSelect, onClose }) {
   const [query, setQuery] = useState('');
