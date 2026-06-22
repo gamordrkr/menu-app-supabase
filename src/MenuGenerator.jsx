@@ -1196,15 +1196,47 @@ const iconBtnStyle = {
 
 function InfoModal({ platillo, conflicts, onClose }) {
   return createPortal(
-    <div className="menu-info-backdrop" onClick={onClose}>
-      <div className="menu-info-box" onClick={(e) => e.stopPropagation()}>
-        <div className="menu-info-title">{platillo}</div>
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: 'rgba(0,0,0,0.6)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 9999,
+        padding: '24px',
+        boxSizing: 'border-box',
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: 'var(--color-background-primary)',
+          color: 'var(--color-text-primary)',
+          borderRadius: 'var(--border-radius-lg)',
+          padding: '20px',
+          width: '100%',
+          maxWidth: '340px',
+          maxHeight: '80vh',
+          overflowY: 'auto',
+          boxSizing: 'border-box',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+        }}
+      >
+        <div style={{ fontSize: '15px', fontWeight: 600, lineHeight: 1.4, marginBottom: '12px' }}>
+          {platillo}
+        </div>
         {conflicts && conflicts.length > 0 && (
           <>
-            <div className="menu-info-subtitle">
+            <div style={{ fontSize: '13px', color: 'var(--color-text-secondary)', lineHeight: 1.4, marginBottom: '8px' }}>
               Se repite (misma familia) en {conflicts.length === 1 ? 'esta otra fecha' : 'estas otras fechas'}, dentro de las {COOLDOWN_WEEKS} semanas de margen:
             </div>
-            <ul className="menu-info-list">
+            <ul style={{ margin: '0 0 16px', paddingLeft: '18px', fontSize: '13px', lineHeight: 1.6 }}>
               {conflicts.map((c, i) => (
                 <li key={i}>
                   <strong>Semana {c.semanaIdx + 1}, {DIAS[c.diaIdx]}:</strong> {c.platillo}
@@ -1213,7 +1245,19 @@ function InfoModal({ platillo, conflicts, onClose }) {
             </ul>
           </>
         )}
-        <button className="menu-info-close" onClick={onClose}>
+        <button
+          onClick={onClose}
+          style={{
+            width: '100%',
+            padding: '10px',
+            borderRadius: 'var(--border-radius-md)',
+            border: '1px solid var(--color-border-secondary)',
+            background: 'var(--color-background-secondary)',
+            color: 'var(--color-text-primary)',
+            fontSize: '14px',
+            cursor: 'pointer',
+          }}
+        >
           Cerrar
         </button>
       </div>
