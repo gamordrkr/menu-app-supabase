@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, createPortal } from 'react';
 import {
   RefreshCw,
   Download,
@@ -1162,7 +1162,7 @@ function DishCell({ dish, highlight, isFixed, onRegenerate, onEdit }) {
         {dish.platillo}
         {hasConflict && <AlertTriangle size={11} className="menu-conflict-icon" aria-label="Se repite" />}
       </div>
-      {showInfo && (
+      {showInfo && createPortal(
         <div
           role="dialog"
           aria-label="Detalle del platillo"
@@ -1192,7 +1192,8 @@ function DishCell({ dish, highlight, isFixed, onRegenerate, onEdit }) {
               Cerrar
             </button>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -1217,7 +1218,7 @@ function EditModal({ categoria, options, current, onSelect, onClose }) {
     d.platillo.toLowerCase().includes(query.toLowerCase())
   );
 
-  return (
+  return createPortal(
     <div
       style={{
         position: 'fixed',
@@ -1310,7 +1311,8 @@ function EditModal({ categoria, options, current, onSelect, onClose }) {
           ))}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -1368,7 +1370,7 @@ function NewClientModal({ onClose, onCreate }) {
     }
   };
 
-  return (
+  return createPortal(
     <div
       style={{
         position: 'fixed',
@@ -1458,7 +1460,8 @@ function NewClientModal({ onClose, onCreate }) {
           Crear cliente
         </button>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
